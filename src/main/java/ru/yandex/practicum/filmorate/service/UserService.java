@@ -79,17 +79,21 @@ public class UserService {
 
     public void removeFriend(Long userId, Long friendId) {
         log.info("Пользователь {} удаляет из друзей пользователя {}", userId, friendId);
+
         User user = getUserById(userId);
         User friend = getUserById(friendId);
 
-        if (!user.getFriends().contains(friendId)) {
-            log.warn("Пользователь {} не в друзьях у пользователя {}", friendId, userId);
-            throw new NotFoundException("Пользователь не найден в списке друзей");
-        }
+        boolean userHadFriend = user.getFriends().contains(friendId);
+        boolean friendHadUser = friend.getFriends().contains(userId);
 
         user.getFriends().remove(friendId);
         friend.getFriends().remove(userId);
-        log.info("Пользователи {} и {} больше не друзья", userId, friendId);
+
+        if (userHadFriend || friendHadUser) {
+            log.info("Пользователи {} и {} больше не друзья", userId, friendId);
+        } else {
+            log.debug("Пользователи {} и {} не были друзьями", userId, friendId);
+        }
     }
 
     public List<User> getFriends(Long userId) {

@@ -78,14 +78,15 @@ public class FilmService {
         Film film = getFilmById(filmId);
         userService.getUserById(userId);
 
-        if (!film.getLikes().contains(userId)) {
-            log.warn("Пользователь {} не ставил лайк фильму {}", userId, filmId);
-            throw new NotFoundException("Лайк не найден");
-        }
-
+        boolean hadLike = film.getLikes().contains(userId);
         film.getLikes().remove(userId);
-        log.info("У фильма {} удален лайк от пользователя {}. Всего лайков: {}",
-                filmId, userId, film.getLikes().size());
+
+        if (hadLike) {
+            log.info("У фильма {} удален лайк от пользователя {}. Всего лайков: {}",
+                    filmId, userId, film.getLikes().size());
+        } else {
+            log.debug("Пользователь {} не ставил лайк фильму {}", userId, filmId);
+        }
     }
 
     public List<Film> getPopularFilms(Integer count) {
