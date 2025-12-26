@@ -13,14 +13,14 @@ import java.util.stream.Collectors;
 @RestControllerAdvice
 public class ErrorHandler {
 
-    @ExceptionHandler(ValidationException.class)
+    @ExceptionHandler
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleValidationException(final ValidationException e) {
         log.warn("Ошибка валидации: {}", e.getMessage());
         return new ErrorResponse(e.getMessage());
     }
 
-    @ExceptionHandler(NotFoundException.class)
+    @ExceptionHandler
     @ResponseStatus(HttpStatus.NOT_FOUND)
     public ErrorResponse handleNotFoundException(final NotFoundException e) {
         log.warn("Запрашиваемый объект не найден: {}", e.getMessage());
@@ -32,7 +32,7 @@ public class ErrorHandler {
     public ErrorResponse handleMethodArgumentNotValidException(final MethodArgumentNotValidException e) {
         String errorMessage = e.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .collect(Collectors.joining("; "));
+                .collect(Collectors.joining(", "));
 
         log.warn("Ошибка валидации данных: {}", errorMessage);
         return new ErrorResponse(errorMessage);
@@ -40,7 +40,7 @@ public class ErrorHandler {
 
     @ExceptionHandler
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse handleThrowable(final Throwable e) {
+    public ErrorResponse handleException(final Exception e) {
         log.error("Внутренняя ошибка сервера", e);
         return new ErrorResponse("Произошла непредвиденная ошибка");
     }
