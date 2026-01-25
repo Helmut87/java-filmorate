@@ -7,7 +7,6 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-import java.util.List;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -31,21 +30,17 @@ public class ErrorHandler {
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ErrorResponse handleMethodArgumentNotValidException(final MethodArgumentNotValidException e) {
-        List<String> errors = e.getBindingResult()
-                .getFieldErrors()
-                .stream()
+        String errorMessage = e.getBindingResult().getFieldErrors().stream()
                 .map(error -> error.getField() + ": " + error.getDefaultMessage())
-                .collect(Collectors.toList());
+                .collect(Collectors.joining(", "));
 
-        String errorMessage = String.join("; ", errors);
         log.warn("Ошибка валидации данных: {}", errorMessage);
-
         return new ErrorResponse(errorMessage);
     }
 
     @ExceptionHandler
     @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ErrorResponse handleThrowable(final Throwable e) {
+    public ErrorResponse handleException(final Exception e) {
         log.error("Внутренняя ошибка сервера", e);
         return new ErrorResponse("Произошла непредвиденная ошибка");
     }
