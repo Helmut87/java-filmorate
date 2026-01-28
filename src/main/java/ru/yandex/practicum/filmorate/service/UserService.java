@@ -82,11 +82,32 @@ public class UserService {
     public void removeFriend(Long userId, Long friendId) {
         log.info("Пользователь {} удаляет из друзей пользователя {}", userId, friendId);
 
-        validateFriendship(userId, friendId);
+        // Проверяем существование обоих пользователей
+        if (!userStorage.existsById(userId)) {
+            log.error("Пользователь с ID {} не найден", userId);
+            throw new NotFoundException("Пользователь с ID " + userId + " не найден");
+        }
 
-        userStorage.removeFriend(userId, friendId);
-        log.info("Пользователь {} успешно удалил из друзей пользователя {}", userId, friendId);
+        if (!userId.equals(friendId) && !userStorage.existsById(friendId)) {
+            log.error("Пользователь с ID {} не найден", friendId);
+            throw new NotFoundException("Пользователь с ID " + friendId + " не найден");
+        }
+
+        // Проверка на попытку удалить себя из друзей
+        if (userId.equals(friendId)) {
+            log.warn("Пользователь {} пытается удалить самого себя из друзей", userId);
+            return;
+        }
+
+        try {
+            userStorage.removeFriend(userId, friendId);
+            log.info("Пользователь {} успешно удалил из друзей пользователя {}", userId, friendId);
+        } catch (NotFoundException e) {
+            log.info("Дружба между пользователями {} и {} не существует, удаление не требуется",
+                    userId, friendId);
+        }
     }
+
 
     public List<User> getFriends(Long userId) {
         log.debug("Запрос на получение списка друзей пользователя с ID: {}", userId);

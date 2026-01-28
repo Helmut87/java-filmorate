@@ -116,9 +116,10 @@ public class UserDbStorageImpl implements UserStorage {
 
         int deleted = jdbcTemplate.update(sql, userId, friendId);
         if (deleted == 0) {
-            throw new NotFoundException("Дружба не найдена");
+            log.debug("Дружба между пользователями {} и {} не найдена", userId, friendId);
+        } else {
+            log.info("Пользователь {} удалил из друзей пользователя {}", userId, friendId);
         }
-        log.info("Пользователь {} удалил из друзей пользователя {}", userId, friendId);
     }
 
     @Override
