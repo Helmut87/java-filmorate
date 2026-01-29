@@ -1,6 +1,5 @@
 package ru.yandex.practicum.filmorate.storage;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Primary;
 import org.springframework.dao.DataAccessException;
@@ -17,7 +16,6 @@ import java.sql.Date;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -25,20 +23,18 @@ import java.util.Optional;
 @Slf4j
 @Component("userDbStorage")
 @Primary
-@RequiredArgsConstructor
 public class UserDbStorageImpl implements UserStorage {
     private final JdbcTemplate jdbcTemplate;
+
+    public UserDbStorageImpl(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
 
     @Override
     public List<User> getAllUsers() {
         String sql = "SELECT * FROM users";
-
-        List<User> users = jdbcTemplate.query(sql, this::mapRowToUser);
-        users.forEach(user ->
-                user.setFriends(new HashSet<>(getFriendsIds(user.getId())))
-        );
-
-        return users;
+        log.debug("Получение всех пользователей из БД");
+        return jdbcTemplate.query(sql, this::mapRowToUser);
     }
 
     @Override
@@ -89,9 +85,6 @@ public class UserDbStorageImpl implements UserStorage {
 
         try {
             User user = jdbcTemplate.queryForObject(sql, this::mapRowToUser, id);
-            if (user != null) {
-                user.setFriends(new HashSet<>(getFriendsIds(id)));
-            }
             return Optional.ofNullable(user);
         } catch (EmptyResultDataAccessException e) {
             return Optional.empty();
@@ -128,6 +121,7 @@ public class UserDbStorageImpl implements UserStorage {
                 "JOIN friendships f ON u.user_id = f.friend_id " +
                 "WHERE f.user_id = ?";
 
+        log.debug("Получение друзей пользователя с ID: {}", userId);
         return jdbcTemplate.query(sql, this::mapRowToUser, userId);
     }
 
@@ -149,12 +143,6 @@ public class UserDbStorageImpl implements UserStorage {
 
     @Override
     public void deleteUser(Long id) {
-
-    }
-
-    private List<Long> getFriendsIds(Long userId) {
-        String sql = "SELECT friend_id FROM friendships WHERE user_id = ?";
-        return jdbcTemplate.queryForList(sql, Long.class, userId);
     }
 
     private User mapRowToUser(ResultSet rs, int rowNum) throws SQLException {

@@ -1,5 +1,6 @@
 package ru.yandex.practicum.filmorate.service;
 
+import jakarta.transaction.Transactional;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -10,28 +11,40 @@ import ru.yandex.practicum.filmorate.impl.UserStorage;
 import ru.yandex.practicum.filmorate.model.User;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 public class UserService {
     private final UserStorage userStorage;
+    private final UserDataLoader userDataLoader;
 
-    public UserService(@Qualifier("userDbStorage") UserStorage userStorage) {
+    public UserService(
+            @Qualifier("userDbStorage") UserStorage userStorage,
+            UserDataLoader userDataLoader) {
         this.userStorage = userStorage;
+        this.userDataLoader = userDataLoader;
     }
 
     public List<User> getAllUsers() {
         log.debug("Запрос на получение всех пользователей");
-        return userStorage.getAllUsers();
+        List<User> users = userStorage.getAllUsers();
+        return enrichUsersWithFriends(users);
     }
 
     public User getUserById(Long id) {
         log.debug("Запрос на получение пользователя с ID: {}", id);
-        return userStorage.getUserById(id)
+        User user = userStorage.getUserById(id)
                 .orElseThrow(() -> new NotFoundException("Пользователь с ID " + id + " не найден"));
+
+        return enrichUserWithFriends(user);
     }
 
+    @Transactional
     public User createUser(@Valid User user) {
         log.info("Создание нового пользователя: {}", user.getLogin());
         validateUser(user);
@@ -46,6 +59,7 @@ public class UserService {
         return createdUser;
     }
 
+    @Transactional
     public User updateUser(@Valid User user) {
         log.info("Обновление пользователя с ID: {}", user.getId());
         validateUser(user);
@@ -70,6 +84,7 @@ public class UserService {
         return updatedUser;
     }
 
+    @Transactional
     public void addFriend(Long userId, Long friendId) {
         log.info("Пользователь {} добавляет в друзья пользователя {}", userId, friendId);
 
@@ -79,10 +94,10 @@ public class UserService {
         log.info("Пользователь {} успешно добавил в друзья пользователя {}", userId, friendId);
     }
 
+    @Transactional
     public void removeFriend(Long userId, Long friendId) {
         log.info("Пользователь {} удаляет из друзей пользователя {}", userId, friendId);
 
-        // Проверяем существование обоих пользователей
         if (!userStorage.existsById(userId)) {
             log.error("Пользователь с ID {} не найден", userId);
             throw new NotFoundException("Пользователь с ID " + userId + " не найден");
@@ -93,21 +108,14 @@ public class UserService {
             throw new NotFoundException("Пользователь с ID " + friendId + " не найден");
         }
 
-        // Проверка на попытку удалить себя из друзей
         if (userId.equals(friendId)) {
             log.warn("Пользователь {} пытается удалить самого себя из друзей", userId);
             return;
         }
 
-        try {
-            userStorage.removeFriend(userId, friendId);
-            log.info("Пользователь {} успешно удалил из друзей пользователя {}", userId, friendId);
-        } catch (NotFoundException e) {
-            log.info("Дружба между пользователями {} и {} не существует, удаление не требуется",
-                    userId, friendId);
-        }
+        userStorage.removeFriend(userId, friendId);
+        log.info("Операция удаления дружбы между {} и {} завершена", userId, friendId);
     }
-
 
     public List<User> getFriends(Long userId) {
         log.debug("Запрос на получение списка друзей пользователя с ID: {}", userId);
@@ -117,7 +125,8 @@ public class UserService {
             throw new NotFoundException("Пользователь с ID " + userId + " не найден");
         }
 
-        return userStorage.getFriends(userId);
+        List<User> friends = userStorage.getFriends(userId);
+        return enrichUsersWithFriends(friends);
     }
 
     public List<User> getCommonFriends(Long userId, Long otherId) {
@@ -125,11 +134,35 @@ public class UserService {
 
         validateBothUsersExist(userId, otherId);
 
-        return userStorage.getCommonFriends(userId, otherId);
+        List<User> commonFriends = userStorage.getCommonFriends(userId, otherId);
+        return enrichUsersWithFriends(commonFriends);
+    }
+
+    private List<User> enrichUsersWithFriends(List<User> users) {
+        if (users.isEmpty()) {
+            return users;
+        }
+
+        List<Long> userIds = users.stream()
+                .map(User::getId)
+                .collect(Collectors.toList());
+
+        Map<Long, Set<Long>> userFriendsMap = userDataLoader.loadFriendsForUsers(userIds);
+
+        for (User user : users) {
+            user.setFriends(userFriendsMap.getOrDefault(user.getId(), new HashSet<>()));
+        }
+
+        return users;
+    }
+
+    private User enrichUserWithFriends(User user) {
+        Set<Long> friendIds = userDataLoader.loadFriendsForUser(user.getId());
+        user.setFriends(friendIds);
+        return user;
     }
 
     private void validateUser(User user) {
-        // Валидация email
         if (user.getEmail() == null || user.getEmail().isBlank()) {
             log.warn("Попытка создать пользователя с пустым email");
             throw new ValidationException("Электронная почта не может быть пустой");
@@ -140,7 +173,6 @@ public class UserService {
             throw new ValidationException("Электронная почта должна содержать символ @");
         }
 
-        // Валидация логина
         if (user.getLogin() == null || user.getLogin().isBlank()) {
             log.warn("Попытка создать пользователя с пустым логином");
             throw new ValidationException("Логин не может быть пустым");
@@ -151,7 +183,6 @@ public class UserService {
             throw new ValidationException("Логин не может содержать пробелы");
         }
 
-        // Валидация даты рождения
         if (user.getBirthday() == null) {
             log.warn("Попытка создать пользователя без даты рождения");
             throw new ValidationException("Дата рождения должна быть указана");
@@ -161,8 +192,6 @@ public class UserService {
             log.warn("Попытка создать пользователя с датой рождения в будущем: {}", user.getBirthday());
             throw new ValidationException("Дата рождения не может быть в будущем");
         }
-
-        log.debug("Валидация пользователя '{}' прошла успешно", user.getLogin());
     }
 
     private void validateFriendship(Long userId, Long friendId) {
